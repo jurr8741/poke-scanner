@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokéCheck AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; padding: 15px; margin: 0; }
+        .container { max-width: 450px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { color: #ffcb05; text-align: center; text-shadow: 2px 2px #3c5aa6; margin-bottom: 20px; }
+        
+        #display-area { width: 100%; border-radius: 15px; overflow: hidden; border: 3px solid #3c5aa6; background: #000; margin-bottom: 15px; min-height: 250px; display: flex; align-items: center; justify-content: center; }
+        canvas, #upload-preview { width: 100% !important; height: auto !important; display: block; }
+        #upload-preview { display: none; }
+
+        .ai-status { font-size: 22px; font-weight: bold; padding: 15px; border-radius: 10px; margin-bottom: 15px; text-align: center; border: 2px solid #333; }
+        .echt { border-color: #4caf50; color: #4caf50; background: rgba(76, 175, 80, 0.1); }
+        .nep { border-color: #f44336; color: #f44336; background: rgba(244, 67, 54, 0.1); }
+
+        .input-section { background: #2a2a2a; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; box-sizing: border-box; }
+        #nameHint { font-size: 14px; color: #ffcb05; margin-top: 8px; font-weight: bold; display: block; }
+        
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; margin-bottom: 8px; }
+        .btn-live { background: #ffcb05; color: #3c5aa6; }
+        .btn-upload { background: #457b9d; color: white; }
+        .btn-save { background: #3c5aa6; color: white; margin-top: 10px; }
+        
+        input[type="file"] { display: none; }
+        .history-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #252525; border-radius: 10px; font-size: 14px; }
+        .history-table td { padding: 12px; border-bottom: 1px solid #333; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>PokéCheck AI</h1>
+    
+    <div id="display-area">
+        <div id="webcam-container">Scanner uit</div>
+        <img id="upload-preview" alt="Preview">
+    </div>
+
+    <div id="label-container" class="ai-status">Kies een methode</div>
+
+    <div class="input-section">
+        <input type="text" id="pokeInput" placeholder="Typ naam of nummer..." oninput="zoekPokemon()">
+        <span id="nameHint">Pokémon: -</span>
+    </div>
+
+    <button class="btn btn-live" onclick="initWebcam()">🎥 Live Cam</button>
+    
+    <label class="btn btn-upload">
+        📁 Foto Kiezen
+        <input type="file" accept="image/*" onchange="handleUpload(this)">
+    </label>
+
+    <button class="btn btn-save" onclick="saveEntry()">💾 Opslaan</button>
+
+    <h3>Geschiedenis</h3>
+    <table class="history-table"><tbody id="historyBody"></tbody></table>
+</div>
+
+<script>
+    const URL = "https://teachablemachine.withgoogle.com/models/O6vMvOTOf/";
+    const pokemonLijst = ["", "Bulbasaur", "Ivysaur", "Venusaur", "Charmander", "Charmeleon", "Charizard", "Squirtle", "Wartortle", "Blastoise", "Caterpie", "Metapod", "Butterfree", "Weedle", "Kakuna", "Beedrill", "Pidgey", "Pidgeotto", "Pidgeot", "Rattata", "Raticate", "Spearow", "Fearow", "Ekans", "Arbok", "Pikachu", "Raichu", "Sandshrew", "Sandslash", "Nidoran♀", "Nidorina", "Nidoqueen", "Nidoran♂", "Nidorino", "Nidoking", "Clefairy", "Clefable", "Vulpix", "Ninetales", "Jigglypuff", "Wigglytuff", "Zubat", "Golbat", "Oddish", "Gloom", "Vileplume", "Paras", "Parasect", "Venonat", "Venomoth", "Diglett", "Dugtrio", "Meowth", "Persian", "Psyduck", "Golduck", "Mankey", "Primeape", "Growlithe", "Arcanine", "Poliwag", "Poliwhirl", "Poliwrath", "Abra", "Kadabra", "Alakazam", "Machop", "Machoke", "Machamp", "Bellsprout", "Weepinbell", "Victreebel", "Tentacool", "Tentacruel", "Geodude", "Graveler", "Golem", "Ponyta", "Rapidash", "Slowpoke", "Slowbro", "Magnemite", "Magneton", "Farfetch'd", "Doduo", "Dodrio", "Seel", "Dewgong", "Grimer", "Muk", "Shellder", "Cloyster", "Gastly", "Haunter", "Gengar", "Onix", "Drowzee", "Hypno", "Krabby", "Kingler", "Voltorb", "Electrode", "Exeggcute", "Exeggutor", "Cubone", "Marowak", "Hitmonlee", "Hitmonchan", "Lickitung", "Koffing", "Weezing", "Rhyhorn", "Rhydon", "Chansey", "Tangela", "Kangaskhan", "Horsea", "Seadra", "Goldeen", "Seaking", "Staryu", "Starmie", "Mr. Mime", "Scyther", "Jynx", "Electabuzz", "Magmar", "Pinsir", "Tauros", "Magikarp", "Gyarados", "Lapras", "Ditto", "Eevee", "Vaporeon", "Jolteon", "Flareon", "Porygon", "Omanyte", "Omastar", "Kabuto", "Kabutops", "Aerodactyl", "Snorlax", "Articuno", "Zapdos", "Moltres", "Dratini", "Dragonair", "Dragonite", "Mewtwo", "Mew"];
+
+    let model, webcam, isLive = false;
+    let currentPrediction = { label: "Onbekend", score: 0 };
+
+    async function loadModel() {
+        model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+    }
+    loadModel();
+
+    async function initWebcam() {
+        isLive = true;
+        document.getElementById('upload-preview').style.display = 'none';
+        document.getElementById('webcam-container').style.display = 'block';
+        if(!model) await loadModel();
+        webcam = new tmImage.Webcam(400, 400, true); 
+        await webcam.setup({ facingMode: "environment" }); 
+        await webcam.play();
+        window.requestAnimationFrame(loop);
+        document.getElementById("webcam-container").innerHTML = "";
+        document.getElementById("webcam-container").appendChild(webcam.canvas);
+    }
+
+    async function loop() {
+        if(!isLive) return;
+        webcam.update();
+        await predict(webcam.canvas);
+        window.requestAnimationFrame(loop);
+    }
+
+    async function handleUpload(input) {
+        isLive = false;
+        if (webcam) await webcam.stop();
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async e => {
+            const img = document.getElementById('upload-preview');
+            img.src = e.target.result;
+            img.style.display = 'block';
+            document.getElementById('webcam-container').style.display = 'none';
+            img.onload = async () => await predict(img);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function predict(imgSource) {
+        if(!model) return;
+        const prediction = await model.predict(imgSource);
+        let high = prediction[0].probability > prediction[1].probability ? prediction[0] : prediction[1];
+        currentPrediction.label = high.className;
+        currentPrediction.score = (high.probability * 100).toFixed(0);
+        const lb = document.getElementById('label-container');
+        lb.innerText = `${currentPrediction.label} (${currentPrediction.score}%)`;
+        lb.className = "ai-status " + (currentPrediction.label === "Echt" ? "echt" : "nep");
+    }
+
+    function zoekPokemon() {
+        const val = document.getElementById('pokeInput').value;
+        const hint = document.getElementById('nameHint');
+        if (!isNaN(val) && val > 0 && val < pokemonLijst.length) {
+            hint.innerText = "Pokémon: " + pokemonLijst[val];
+        } else {
+            hint.innerText = "Pokémon: " + (val || "-");
+        }
+    }
+
+    function saveEntry() {
+        const name = document.getElementById('nameHint').innerText.replace("Pokémon: ", "");
+        if(name === "-") return alert("Vul een naam of nummer in!");
+        const entry = { name: name, status: currentPrediction.label, date: new Date().toLocaleTimeString() };
+        let history = JSON.parse(localStorage.getItem('pokeFinal')) || [];
+        history.push(entry);
+        localStorage.setItem('pokeFinal', JSON.stringify(history));
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const history = JSON.parse(localStorage.getItem('pokeFinal')) || [];
+        document.getElementById('historyBody').innerHTML = history.reverse().map(item => `
+            <tr>
+                <td><b>${item.name}</b><br><small>${item.date}</small></td>
+                <td style="text-align:right; font-weight:bold; color:${item.status === 'Echt' ? '#4caf50' : '#f44336'}">${item.status}</td>
+            </tr>`).join('');
+    }
+    renderHistory();
+</script>
+</body>
+</html>
